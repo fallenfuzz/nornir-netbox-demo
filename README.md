@@ -1,8 +1,10 @@
 # nornir-netbox-demo.py
 
-This script uses Netbox as a Source of Truth for Nornir to automate provisioning, deployment and testing of a demo WAN.
+This script uses Netbox as a Source of Truth for Nornir to automate the provisioning, deployment and validation of a demo WAN.
 
-Devices must be prepopulated in Netbox with a Primary IP address for management and the JSON provisioning data in the Config Context field.
+Devices must be added to Netbox with a Primary IP address for management and be accessible via SSH.
+
+JSON provisioning data must be populated in NetBox for each device in the Config Context field.
 
 # Script overview:
 
@@ -29,9 +31,11 @@ Devices must be prepopulated in Netbox with a Primary IP address for management 
 
 # Sample Config Context provisioning data for Netbox:
 
+```json
 {
     "bgp": {
         "asn": 65511,
+        "rid": "1.1.1.1",
         "neighbors": [
             {
                 "ipaddr": "172.20.12.2",
@@ -42,7 +46,20 @@ Devices must be prepopulated in Netbox with a Primary IP address for management 
                 "remote_asn": 65513
             }
         ],
-        "rid": "1.1.1.1"
+        "networks": [
+            {
+                "net": "1.1.1.1",
+                "mask": "255.255.255.255"
+            },
+            {
+                "net": "172.20.12.0",
+                "mask": "255.255.255.0"
+            },
+            {
+                "net": "172.20.13.0",
+                "mask": "255.255.255.0"
+            }
+        ]
     },
     "interfaces": {
         "GigabitEthernet1": {
@@ -62,3 +79,4 @@ Devices must be prepopulated in Netbox with a Primary IP address for management 
         }
     }
 }
+```

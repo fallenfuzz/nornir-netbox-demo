@@ -1,9 +1,11 @@
 """
 nornir-netbox-demo.py
 
-This script uses Netbox as a Source of Truth for Nornir to automate provisioning, deployment and testing of a demo WAN.
+This script uses Netbox as a Source of Truth for Nornir to automate provisioning, deployment and validation of a demo WAN.
 
-Devices must be prepopulated in Netbox with a Primary IP address for management.
+Devices must be prepopulated in Netbox with a Primary IP address for management and be accessible via SSH.
+
+JSON provisioning data must be populated in NetBox for each device in the Config Context field.
 
 Script overview:
 
@@ -42,6 +44,20 @@ Sample Config Context provisioning data for Netbox:
                 "remote_asn": 65513
             }
         ],
+        "networks": [
+            {
+                "net": "1.1.1.1",
+                "mask": "255.255.255.255"
+            },
+            {
+                "net": "172.20.12.0",
+                "mask": "255.255.255.0"
+            },
+            {
+                "net": "172.20.13.0",
+                "mask": "255.255.255.0"
+            }
+        ],
         "rid": "1.1.1.1"
     },
     "interfaces": {
@@ -66,6 +82,7 @@ Sample Config Context provisioning data for Netbox:
 
 
 import re
+import time
 from netbox import NetBox
 from nornir import InitNornir
 from ipaddress import ip_interface
@@ -129,7 +146,7 @@ def kickoff():
     nb_host = re.sub("^.*//|:.*$", "", nb_url)
 
     # set filter on Netbox role
-    nr = nr.filter(role="router")
+    nr = nr.filter(role="wan-router-provision")
 
     # print error and exit if no hosts found
     if len(nr.inventory.hosts) == 0:
@@ -258,6 +275,7 @@ def apply_l3_configs(task):
 
 # validate Layer 3 connectivity
 def validate_l3(task):
+
     # init failed ping count
     failed_pings = 0
     # iterate over BGP neighbors
@@ -318,6 +336,9 @@ def apply_bgp_configs(task):
 
 # validate BGP adjacencies
 def validate_bgp(task):
+    """
+    Nornir task to validate BGP peers have come up
+    """
     # get bgp status from devices
     bgp = task.run(
         task=napalm_get,
@@ -373,6 +394,8 @@ def update_netbox(task, netbox):
     interfaces = task.host["interfaces"]
     # assign variable with Netbox interface data
     nb_interfaces = task.host["nb_interfaces"]
+    # assign variable with device ID
+    device_id = task.host["device_id"]
 
     for interface_name in interfaces.keys():
         # assign variable with interface description
@@ -386,7 +409,6 @@ def update_netbox(task, netbox):
         if not is_interface_present(nb_interfaces, f"{task.host}", interface_name):
 
             c_print(f"*** {task.host}: creating Netbox interface: {interface_name} ***")
-            device_id = task.host["device_id"]
             netbox.dcim.create_interface(
                 name=f"{interface_name}",
                 device_id=device_id,
@@ -432,6 +454,17 @@ def update_netbox(task, netbox):
                         f"*** {task.host}: {ipaddr} exists - verify manually in Netbox ***"
                     )
 
+    netbox.dcim.update_device(
+        device_name=f"{task.host}",
+        device_type={"id": 2},
+        device_role={"id": 2},
+        site={"id": 1}
+    )
+
+    c_print(
+        f"*** {task.host}: moved from Provisioning to Production ***"
+    )
+
 
 # main function
 def main():
@@ -471,6 +504,7 @@ def main():
 
     # run The Norn to validate Layer 3 connectivity
     c_print("Validating Layer 3 connectivity")
+    time.sleep(20)
     nr.run(task=validate_l3)
     c_print(f"Failed hosts: {nr.data.failed_hosts}")
     print("~" * 80)
@@ -484,6 +518,7 @@ def main():
 
     # run The Norn to validate BGP adjacencies
     c_print("Validating BGP adjacencies")
+    time.sleep(20)
     nr.run(task=validate_bgp)
     c_print(f"Failed hosts: {nr.data.failed_hosts}")
     print("~" * 80)
